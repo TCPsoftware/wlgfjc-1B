@@ -143,7 +143,7 @@ class DeleteFileHandler(tornado.web.RequestHandler):
         if delete_status:
             response_data = {"msg": "success"}
         else:
-            response_data = {"error": "error"}
+            response_data = {"msg": "error"}
         self.set_header("Content-Type", "application/json")
         self.write(response_data)
 
@@ -175,26 +175,4 @@ class DeleteFileHandler(tornado.web.RequestHandler):
 #         # 发送生成的二维码图片到响应
 #         self.set_header("Content-Type", "image/png")
 #         self.write(img_bytes.getvalue())
-
-
-
-class UploadHandler(tornado.web.RequestHandler):
-    def post(self):
-        file_info = self.request.files['file'][0]
-        original_filename = file_info['filename']
-        file_body = file_info['body']
-
-        # 指定保存文件的目录
-        upload_dir = "uploads"
-        if not os.path.exists(upload_dir):
-            os.makedirs(upload_dir)
-
-        # 拼接保存文件的完整路径
-        file_path = os.path.join(upload_dir, original_filename)
-
-        # 将文件保存到本地文件系统
-        with open(file_path, 'wb') as f:
-            f.write(file_body)
-
-        self.write(f"File '{original_filename}' uploaded successfully.")
 

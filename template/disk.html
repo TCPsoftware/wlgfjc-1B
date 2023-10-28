@@ -272,7 +272,7 @@
                     console.log(`remain range: [${start_remain}, ${end_remain}), ${end_remain - start_remain}`);
                     if (remain_size > 0) {
                         let socket_remain = create_socketio_thread(start_offset=start_remain, end_offset=end_remain, download_when_done = false, done_callback = null);
-                        socket_remain.emit("file_download", { filename: fname, start_offset: start_remain, end_offset: end_remain, block_size: block_size });
+                        socket_remain.emit("file_download", { "filename": fname, "start_offset": start_remain, "end_offset": end_remain, "block_size": block_size });
                         socket_list.push(socket_remain);
                         $pgbar.append($('\
                         <div class="progress" role="progressbar" style="width: 0%">\

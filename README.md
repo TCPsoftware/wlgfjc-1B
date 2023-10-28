@@ -1,5 +1,7 @@
 # wlgfjc-1B
 
+Github存储库：[https://github.com/TCPsoftware/wlgfjc-1B/](https://github.com/TCPsoftware/wlgfjc-1B/)
+
 UCAS-23秋网络攻防基础-作业1B-项目成果
 
 ## CP_Cloud ——你的云端硬盘(伪)
@@ -10,11 +12,11 @@ CP_Cloud 是一个~~高效~~的云存储服务，帮助您轻松存储和管理�
 
 &nbsp;
 
-**关于项目的更多细节参考** [The Project Document.md](./The Project Document.md)
+**关于项目的更多细节参考** [The_Project_Document.md](./The_Project_Document.md)
 
-**关于项目的更多细节参考** [The Project Document.md](./The Project Document.md)
+**关于项目的更多细节参考** [The_Project_Document.md](./The_Project_Document.md)
 
-**关于项目的更多细节参考** [The Project Document.md](./The Project Document.md)
+**关于项目的更多细节参考** [The_Project_Document.md](./The_Project_Document.md)
 
 ## 界面展示
 
@@ -37,9 +39,9 @@ CP_Cloud 是一个~~高效~~的云存储服务，帮助您轻松存储和管理�
 0. 安装conda（此处省略）、浏览器，连接至互联网。
 1. conda 导入和创建环境，我这里这个环境名字叫 wangluogongfang  
    导入后应该就会自动安装conda管理的包  
-   ```conda env create -f py36.yaml```
+   ```conda env create -f environment.yaml```
 2. pip 安装剩余包。如果conda自动安装还有遗漏的，或者说后续第 4 步运行提示缺少包的，在此处pip安装  
-   `pip install -r 27.txt`
+   `pip install -r environment.txt`
 3. 启用环境  
    `conda activate wangluogongfang`
 4. 项目，启动！  
