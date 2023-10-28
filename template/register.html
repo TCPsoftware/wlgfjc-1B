@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>CP_Cloud 用户注册</title>
+    <link rel="stylesheet" href="./css/bootstrap.min.css">
+</head>
+
+<body>
+    <nav class="navbar navbar-expand-lg navbar-light bg-light py-3" style="height: 8vh;">
+        <a class="navbar-brand ml-3" href="/">CP_Cloud ——你的云端硬盘(伪)</a>
+    </nav><br>
+
+    <h3 style="text-align: center;">CP_Cloud 用户注册</h3><br>
+    <form class="mx-auto" action="/register" method="post">
+        <div class="form-group col-6 mx-auto">
+            <label for="username">用户名:</label>
+            <input type="text" class="form-control" id="username" name="username" required>
+            <!-- <br><br> -->
+        </div>
+        <div class="form-group col-6 mx-auto">
+            <label for="password">密码:</label>
+            <input type="password" class="form-control" id="password" name="password" required>
+            <!-- <br><br> -->
+        </div>
+        <div class="form-group col-6 mx-auto">
+            <label for="confirmPassword">确认密码：</label>
+            <input type="password" class="form-control" id="confirmPassword" required>
+            <!-- <br><br> -->
+        </div>
+        <div class="form-group col-6 mx-auto">
+            <input type="submit" class="form-control" value="注册" onclick="register_check()">
+        </div>
+    </form>
+    <div style="color: red">{{msg}}</div>
+    <script>
+    </script>
+    <script src="./js/jquery-3.7.1.min.js"></script>
+    <script src="./js/login_form.js"></script>
+    <script src="./js/common.js"></script>
+</body>
+
+</html>

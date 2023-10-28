@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Socket.IO Example</title>
+</head>
+<body>
+    <h1>Socket.IO Example</h1>
+    
+    <div id="messages"></div>
+    <input type="text" id="message" placeholder="Enter a message">
+    <button onclick="sendMessage()">Send</button>
+
+    <script src="./js/socket.io_4.7.2.js"></script>
+    <script src="./js/socket_communication.js"></script>
+    <script>
+        socket = create_socketio_thread()
+        function sendMessage() {
+            var messageInput = document.getElementById("message");
+            var message = messageInput.value;
+            socket.emit("message", message);
+            messageInput.value = "";
+        }
+    </script>
+</body>
+</html>
+

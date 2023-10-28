@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <title>用户文件</title>
+    <!-- <link rel="stylesheet" href="./css/bootstrap.min.css"> -->
+    <link rel="stylesheet" href="./css/bootstrapv5.3.1.min.css">
+    <script src="./js/jquery-3.7.1.min.js"></script>
+    <script src="./js/common.js"></script>
+    <!-- <script src="./js/bootstrap.min.js"></script> -->
+    <script src="./js/bootstrapv5.3.1.min.js"></script>
+    <script src="./js/socket.io_4.7.2.js"></script>
+    <script src="./js/socket_communication.js"></script>
+    <style>
+        /* 用于进度条显示的css */
+        .bg-tcp_gray {
+            background-color: #e9ecef;
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-light bg-light py-3" style="height: 8vh;">
+        <a class="navbar-brand m-3" href="/">CP_Cloud ——你的云端硬盘(伪)</a>
+    </nav><br>
+    <div class="p-3">
+        <h3 class="text-center">文件上传</h3>
+        <div class="input-group">
+            <input type="file" class="form-control" id="file_select_input" aria-label="Upload" aria-describedby="file_upload_button">
+            <button class="btn btn-primary" type="button" id="file_upload_button" onclick="upload_file()">上传文件</button>
+        </div>
+        <div id="upload_messages"></div>
+        <br>
+        <h3 class="text-center">文件列表</h3>
+        <div style="display: flex;justify-content: center;align-items: center;margin: 15px;">
+            <span>下载选项：</span>
+            <div class="form-check form-switch">
+                <input class="form-check-input" type="checkbox" id="MultiThreadDownload" checked>
+                <label class="form-check-label" for="MultiThreadDownload">多线程下载</label>
+            </div>
+        </div>
+        <table class="table table-striped table-bordered p-5">
+            <thead class="thead-light">
+                <tr>
+                    <th>文件名</th>
+                    <th>文件大小(Byte)</th>
+                    <th>文件大小</th>
+                    <th>创建时间</th>
+                    <th>操作</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for file in files %}
+                <tr>
+                    <td style="max-width: 600px;">{{ file.name }}</td>
+                    <td style="text-align: right;">{{ file.size }}</td>
+                    <td style="text-align: right;">{{ file.size_humanreadable }}</td>
+                    <td>{{ file.created_time }}</td>
+                    <td>
+                        <button class="btn btn-primary"
+                            onclick="download_file('{{ file.name }}', {{file.size}})">下载</button>
+                        <button class="btn btn-danger" onclick="delete_file('{{ file.name }}')">删除
+                        </button>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        <div>
+            <!-- <div class="progress-stacked">
+                <div class="progress" role="progressbar" style="width: 10%">
+                    <div class="progress-bar bg-primary"></div>
+                </div>
+                <div class="progress" role="progressbar" style="width: 10%">
+                    <div class="progress-bar bg-tcp_gray"></div>
+                </div>
+                <div class="progress" role="progressbar" style="width: 10%">
+                    <div class="progress-bar bg-success"></div>
+                </div>
+                <div class="progress" role="progressbar" style="width: 10%">
+                    <div class="progress-bar bg-tcp_gray"></div>
+                </div>
+            </div> -->
+            <div id="messages"></div>
+            <!-- <input type="text" id="message" placeholder="Enter a message">
+            <button onclick="sendMessage()">Send</button> -->
+        </div>
+    </div>
+    <br><br><br><br><br><br>
+    <script src="./js/socket.io_4.7.2.js"></script>
+    <script src="./js/socket_communication.js"></script>
+    <script>
+
+        socket_main = create_socketio_thread(start_offset=0, end_offset=0, download_when_done = true, done_callback = null, auto_reconnect = true)
+        // function sendMessage() {
+        //     var messageInput = document.getElementById("message");
+        //     var message = messageInput.value;
+        //     socket_main.emit("message", message);
+        //     messageInput.value = "";
+        // }
+
+        async function sleep(time_seconds) {
+            return new Promise(resolve => setTimeout(resolve, time_seconds * 1000));
+        }
+
+        async function upload_file(){
+            let $file_input = $("#file_select_input");
+            if($file_input[0].files.length == 0){
+                window.alert("未选择文件");
+                return false;
+            }
+            let file0 = $file_input[0].files[0];
+            const confirmed = window.confirm(`确认要 上传文件 "${file0.name}" 吗？`);
+            if (confirmed) {
+                let upload_token = "default";
+                let file_info = {
+                    filename: file0.name,
+                    file_size: file0.size,
+                    file_type: file0.type
+                };
+                await new Promise((resolve) => {
+                    socket_main.emit('file_upload_request', file_info, (res) => {
+                        console.log("获得文件上传token: ", res);
+                        // debugger
+                        upload_token = res.token;
+                        if(upload_token == null) {
+                            $("#upload_messages").append(`<p>获取上传token失败，错误信息：${JSON.stringify(res)}</p>`);
+                        }
+                        resolve();
+                    });
+                });
+                console.log("upload_token:", upload_token);
+                if(upload_token == null) {
+                    return false; // 中止上传
+                }
+                let reader = new FileReader();
+                reader.onload = function(event) { // 定义处理文件加载完成的事件处理程序
+                    let binaryData = event.target.result; // 文件的二进制数据
+                    console.log("file length:", file_info.file_size, binaryData.byteLength);
+                    const total_bytes = binaryData.byteLength;
+                    const block_size = 4096;
+                    if (total_bytes > 0) { // 有内容的文件
+                        let start_offset = 0;
+                        let end_offset = block_size;
+                        socket_main.tcpsoft_upload.byte_start = 0;
+                        socket_main.tcpsoft_upload.byte_end = 0;
+                        socket_main.tcpsoft_upload.byte_finish = total_bytes;
+                        socket_main.tcpsoft_upload.finished = false;
+                        while (start_offset < total_bytes) {
+                            // console.log(`[${start_offset}, ${end_offset})`);
+                            let binary_data_part = binaryData.slice(start_offset, end_offset);
+                            socket_main.emit('file_upload', {
+                                "auth_token": upload_token,
+                                "start_offset": start_offset,
+                                "end_offset": end_offset,
+                                "remain": total_bytes - end_offset
+                            }, binary_data_part, (res) => {
+                                let confirm_start_offset = res["confirm_start_offset"];
+                                let confirm_end_offset = res["confirm_end_offset"];
+                                if(socket_main.tcpsoft_upload.byte_end == confirm_start_offset){
+                                    // socket_main.tcpsoft_upload.byte_start = confirm_start_offset; // 不修改start不然无法记录socket下载进度
+                                    socket_main.tcpsoft_upload.byte_end = confirm_end_offset;
+                                }else{
+                                    console.log("upload not match:", socket_main.tcpsoft_upload, res)
+                                    debugger
+                                }
+                                if(confirm_end_offset == total_bytes){
+                                    socket_main.tcpsoft_upload.finished = true;
+                                }
+                            });
+                            start_offset = end_offset; // 更新下一个迭代
+                            end_offset = Math.min(start_offset + block_size, total_bytes);
+                        }
+                    } else {
+                        $("#upload_messages").append(`<p>【${file_info.filename}】是空文件。上传已取消。</p>`);
+                    }
+                };
+                reader.readAsArrayBuffer(file0); // 二进制读取文件
+                console.warn("upload start. 【"+file_info.filename+"】");
+                $("#upload_messages").append(`<p><b>请等待读取文件并上传。文件名【${file_info.filename}】。刷新和关闭页面会导致文件上传异常。</b></p>`);
+                let $pgbar = $('<div class="progress-stacked"></div>');
+                $("#upload_messages").append($pgbar);
+                let $speed = $('<div></div>');
+                $("#upload_messages").append($speed);
+                $pgbar.append($('<div class="progress" role="progressbar" style="width: 0%">\
+                                    <div class="progress-bar bg-primary"></div>\
+                                </div>'));
+                let downloaded_all_bytes = 0;
+                let count_time = 0;
+                let sleep_time = 0.2;
+                while (true) {
+                    await sleep(sleep_time);
+                    count_time += 1
+                    //从list读取数据并更新进度条
+                    let finish_status = socket_main.tcpsoft_upload.finished;
+                    const total_bytes = file_info.file_size;
+                    let sock_start = socket_main.tcpsoft_upload.byte_start;
+                    let sock_end = socket_main.tcpsoft_upload.byte_end;
+                    let sock_finish = socket_main.tcpsoft_upload.byte_finish;
+                    $pgbar.children().eq(0).css("width", (sock_end - sock_start)/total_bytes * 100 + "%");
+                    if(finish_status) {
+                        // debugger
+                    }
+                    if(count_time == 1 || count_time % 5 == 0 || finish_status) { // 每一秒统计一次速度
+                        let delta_downloaded_bytes = (sock_end - sock_start) - downloaded_all_bytes; // 当前socket的已上传的bytes - 上次已上传的
+                        let all_size_text = human_readable_size(total_bytes);
+                        let cur_speed_text = human_readable_size(delta_downloaded_bytes)+"/s";
+                        downloaded_all_bytes += delta_downloaded_bytes;
+                        let avg_speed_text = human_readable_size(downloaded_all_bytes/(count_time*sleep_time))+"/s";
+                        let remain_time_text = Math.floor((total_bytes-downloaded_all_bytes)/(downloaded_all_bytes/(count_time*sleep_time)))+"s";
+                        $speed.text(`总大小：${all_size_text}, 当前上传速度：${cur_speed_text}, 平均上传速度：${avg_speed_text}, `+
+                        `耗时: ${count_time*sleep_time}s, 预计剩余时间：${remain_time_text}`);
+                    }
+                    if(finish_status){
+                        $pgbar.find(".progress-bar").addClass("bg-success");
+                        console.warn("upload finished.【"+file_info.filename+"】");
+                        $("#upload_messages").append("<p>上传完毕。【"+file_info.filename+"】。请手动刷新页面查看新的文件列表。</p>");
+                        break;
+                    }
+                }
+            } else {
+                console.log("取消上传文件");
+            }
+        }
+
+        async function download_file(fname, bytes_all) {
+            const confirmed = window.confirm(`确认要下载文件 "${fname}" 吗？`);
+            if (confirmed) {
+                var isMultiThreadDownload = $("#MultiThreadDownload").prop("checked");
+                console.log("多线程下载是否开启: " + isMultiThreadDownload);
+                console.warn("send download request", fname, "file size:", bytes_all);
+                $("#messages").append(`<p><b>多线程模式：${isMultiThreadDownload}。已发起【${fname}】下载请求，文件大小 ${bytes_all} Byte，请耐心等待。</b></p>`);
+                if (isMultiThreadDownload) {
+                    const workers = 8;
+                    const block_size = 4096;
+                    const worker_period_block_size = workers * block_size;
+                    const num_blocks_per_worker = Math.floor(bytes_all / worker_period_block_size);
+                    socket_list = [];
+                    // let socket_list = [];
+                    let $pgbar = $('<div class="progress-stacked"></div>');
+                // <div class="progress" role="progressbar" style="width: 10%">\
+                //     <div class="progress-bar bg-primary"></div>\
+                // </div>\
+                // <div class="progress" role="progressbar" style="width: 10%">\
+                //     <div class="progress-bar bg-tcp_gray"></div>\
+                // </div>\
+                    $("#messages").append($pgbar);
+                    let $speed = $('<div></div>');
+                    $("#messages").append($speed);
+
+                    if (num_blocks_per_worker>0){ // 每个worker分到的块至少为1
+                        for (let w = 1; w <= workers; w++) {
+                            let start = (w - 1) * num_blocks_per_worker * block_size;
+                            let end = w * num_blocks_per_worker * block_size;
+                            console.log(`worker ${w}: [${(w - 1)}*${num_blocks_per_worker}*${block_size}=${start}, ${w}*${num_blocks_per_worker}*${block_size}=${end})`);
+                            let socket_tmp = create_socketio_thread(start_offset=start, end_offset=end, download_when_done=false, done_callback=null)
+                            socket_tmp.emit("file_download", { filename: fname, start_offset: start, end_offset: end, block_size: block_size });
+                            socket_list.push(socket_tmp);
+                            $pgbar.append($('\
+                            <div class="progress" role="progressbar" style="width: 0%">\
+                                <div class="progress-bar bg-primary"></div>\
+                            </div>\
+                            <div class="progress" role="progressbar" style="width: 0%">\
+                                <div class="progress-bar bg-tcp_gray"></div>\
+                            </div>'));
+                        }
+                    }
+                    const remain_size = bytes_all % worker_period_block_size;
+                    const start_remain = workers * num_blocks_per_worker * block_size;
+                    const end_remain = bytes_all;
+                    console.log(`remain size: ${remain_size} bytes`);
+                    console.log(`remain range: [${start_remain}, ${end_remain}), ${end_remain - start_remain}`);
+                    if (remain_size > 0) {
+                        let socket_remain = create_socketio_thread(start_offset=start_remain, end_offset=end_remain, download_when_done = false, done_callback = null);
+                        socket_remain.emit("file_download", { filename: fname, start_offset: start_remain, end_offset: end_remain, block_size: block_size });
+                        socket_list.push(socket_remain);
+                        $pgbar.append($('\
+                        <div class="progress" role="progressbar" style="width: 0%">\
+                            <div class="progress-bar bg-primary"></div>\
+                        </div>\
+                        <div class="progress" role="progressbar" style="width: 0%">\
+                            <div class="progress-bar bg-tcp_gray"></div>\
+                        </div>'));
+                    }
+
+                    let downloaded_all_bytes = 0;
+                    let count_time = 0;
+                    let sleep_time = 0.2;
+                    for (let socket_loop of socket_list) {
+                        while (!socket_loop.tcpsoft_cache.finished) {
+                            await sleep(sleep_time);
+                            count_time += 1
+                            //从list读取数据并更新进度条
+                            const total_bytes = bytes_all;
+                            let sub_pgbar = $pgbar.children();
+                            let current_downloaded_bytes = 0;
+                            for (let i in socket_list) {
+                                let sock_tmp = socket_list[i];
+                                let sock_start = sock_tmp.tcpsoft_cache.byte_start;
+                                let sock_end = sock_tmp.tcpsoft_cache.byte_end;
+                                let sock_finish = sock_tmp.tcpsoft_cache.byte_finish;
+                                current_downloaded_bytes += sock_end - sock_start; // 当前socket的已下载bytes
+                                sub_pgbar.eq(2*i).css("width", (sock_end - sock_start)/total_bytes * 100 + "%");
+                                sub_pgbar.eq(2*i+1).css("width", (sock_finish - sock_end)/total_bytes * 100 + "%");
+                            }
+                            if(count_time == 1 || count_time % 5 == 0) { // 每一秒统计一次下载速度
+                                let delta_downloaded_bytes = current_downloaded_bytes - downloaded_all_bytes;
+                                let all_size_text = human_readable_size(bytes_all);
+                                let cur_speed_text = human_readable_size(delta_downloaded_bytes)+"/s";
+                                downloaded_all_bytes += delta_downloaded_bytes;
+                                let avg_speed_text = human_readable_size(downloaded_all_bytes/(count_time*sleep_time))+"/s";
+                                let remain_time_text = Math.floor((bytes_all-downloaded_all_bytes)/(downloaded_all_bytes/(count_time*sleep_time)))+"s";
+                                $speed.text(`总大小：${all_size_text}, 当前下载速度：${cur_speed_text}, 平均下载速度：${avg_speed_text}, `+
+                                `耗时: ${count_time*sleep_time}s, 预计剩余时间：${remain_time_text}`);
+                            }
+                        }
+                    }
+                    $pgbar.find(".progress-bar").addClass("bg-success");
+                    console.warn("All workers finished downloading.【"+fname+"】");
+                    $("#messages").append("<p>所有下载进程已完成下载【"+fname+"】。</p>");
+
+                    console.warn("Merging and downloading files...【"+fname+"】");
+                    $("#messages").append(`<p>正在合并然后保存文件【${fname}】到本地。</p>`);
+
+                    let full_file_data = [];
+                    for (let socket_tmp of socket_list) {
+                        full_file_data.push(...socket_tmp.tcpsoft_cache.file_cache);
+                    }
+                    let blob = new Blob(full_file_data);
+                    let url = URL.createObjectURL(blob);
+                    let a = document.createElement('a');
+                    a.href = url;
+                    a.download = fname;
+                    a.click();
+                    URL.revokeObjectURL(url);
+                    // 清空缓存
+                    // debugger
+                    socket_list.forEach((socket_tmp, loop_index) => {
+                        socket_tmp.tcpsoft_cache.file_cache = [];
+                        socket_tmp.disconnect();
+                        socket_list[loop_index] = null;
+                    });
+                    // debugger
+                } else {
+                    if (bytes_all <= 500) block_size = 6;
+                    else block_size = 4096;
+                    socket_main.emit("file_download", { filename: fname, start_offset: 0, end_offset: bytes_all, block_size: block_size }); // , block_size: 100
+                    let $pgbar = $('<div class="progress-stacked"></div>');
+                    $("#messages").append($pgbar);
+                    let $speed = $('<div></div>');
+                    $("#messages").append($speed);
+                    $pgbar.append($('<div class="progress" role="progressbar" style="width: 0%">\
+                                        <div class="progress-bar bg-primary"></div>\
+                                    </div>'));
+                    let downloaded_all_bytes = 0;
+                    let count_time = 0;
+                    let sleep_time = 0.2;
+                    while (true) {
+                        await sleep(sleep_time);
+                        count_time += 1
+                        //从list读取数据并更新进度条
+                        let finish_status = socket_main.tcpsoft_cache.finished;
+                        const total_bytes = bytes_all;
+                        let sock_start = socket_main.tcpsoft_cache.byte_start;
+                        let sock_end = socket_main.tcpsoft_cache.byte_end;
+                        let sock_finish = socket_main.tcpsoft_cache.byte_finish;
+                        $pgbar.children().eq(0).css("width", (sock_end - sock_start)/total_bytes * 100 + "%");
+                        if(finish_status) {
+                            // debugger
+                        }
+                        // debugger
+                        if(count_time == 1 || count_time % 5 == 0 || finish_status) { // 每一秒统计一次下载速度
+                            let delta_downloaded_bytes = (sock_end - sock_start) - downloaded_all_bytes;
+                            let all_size_text = human_readable_size(bytes_all);
+                            let cur_speed_text = human_readable_size(delta_downloaded_bytes)+"/s";
+                            downloaded_all_bytes += delta_downloaded_bytes;
+                            let avg_speed_text = human_readable_size(downloaded_all_bytes/(count_time*sleep_time))+"/s";
+                            let remain_time_text = Math.floor((bytes_all-downloaded_all_bytes)/(downloaded_all_bytes/(count_time*sleep_time)))+"s";
+                            $speed.text(`总大小：${all_size_text}, 当前下载速度：${cur_speed_text}, 平均下载速度：${avg_speed_text}, `+
+                            `耗时: ${count_time*sleep_time}s, 预计剩余时间：${remain_time_text}`);
+                        }
+                        if(finish_status){
+                            $pgbar.find(".progress-bar").addClass("bg-success");
+                            console.warn("download finished.【"+fname+"】");
+                            // socket_main.tcpsoft_cache = {};
+                            // socket_main.tcpsoft_cache.file_cache = [];
+                            socket_main.tcpsoft_cache.byte_start = 0;
+                            socket_main.tcpsoft_cache.byte_end = 0;
+                            socket_main.tcpsoft_cache.byte_finish = 0;
+                            socket_main.tcpsoft_cache.finished = false;
+                            break;
+                        }
+                    }
+                }
+            } else {
+                console.log(`取消下载文件 "${fname}"`);
+            }
+        }
+
+        function delete_file(fname) {
+            const confirmed = window.confirm(`确认要删除文件 "${fname}" 吗？`);
+            if (confirmed) {
+                console.log(`发送请求删除文件 "${fname}"`);
+                const formData = new FormData();
+                formData.append('filename', fname);
+
+                fetch('/delete_file', {
+                    method: 'POST',
+                    body: formData,
+                })
+                    .then(response => response.json())
+                    .then(data => {
+                        console.log(`已删除文件 "${fname}"`);
+                        console.log(data);
+                        location.reload();
+                    })
+                    .catch(error => {
+                        console.error(`删除文件 "${fname}" 失败: ${error}`);
+                    });
+            } else {
+                console.log(`取消删除文件 "${fname}"`);
+            }
+        }
+    </script>
+</body>
+</html>
